@@ -55,29 +55,48 @@ function showPicker() {
     ? "Step 1 of 2 — Select a folder or file to copy"
     : "Step 2 of 2 — Select where to copy it";
 
-  // Source step: any file type is selectable (folders included).
-  // Destination step: folders only — you can't copy "into" a file.
-  const view = step === "source"
-    ? new google.picker.DocsView(google.picker.ViewId.DOCS)
-        .setParent("root")
-        .setIncludeFolders(true)
-        .setSelectFolderEnabled(true)
-        .setMode(google.picker.DocsViewMode.LIST)
-    : new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-        .setParent("root")
-        .setIncludeFolders(true)
-        .setSelectFolderEnabled(true)
-        .setMode(google.picker.DocsViewMode.LIST);
-
-  const picker = new google.picker.PickerBuilder()
+  const builder = new google.picker.PickerBuilder()
     .setTitle(title)
-    .addView(view)
     .setOAuthToken(oauthToken)
     .setDeveloperKey(PICKER_API_KEY)
     .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
-    .setCallback(onPickerAction)
-    .build();
+    .setCallback(onPickerAction);
 
+  if (step === "source") {
+    // Three tabs, matching Drive's own left-nav sections: My Drive, Shared
+    // with me, and Starred. Any file type is selectable (folders included).
+    const myDriveView = new google.picker.DocsView(google.picker.ViewId.DOCS)
+      .setParent("root")
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(google.picker.DocsViewMode.LIST);
+
+    const sharedWithMeView = new google.picker.DocsView(google.picker.ViewId.DOCS)
+      .setOwnedByMe(false) // "shared with me" = not owned by the current user
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(google.picker.DocsViewMode.LIST);
+
+    const starredView = new google.picker.DocsView(google.picker.ViewId.DOCS)
+      .setStarred(true)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(google.picker.DocsViewMode.LIST);
+
+    builder.addView(myDriveView).addView(sharedWithMeView).addView(starredView);
+  } else {
+    // Destination step: your own "My Drive" only, folders only — you can't
+    // copy "into" a file, and copies always land in your own storage.
+    const destView = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+      .setParent("root")
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true)
+      .setMode(google.picker.DocsViewMode.LIST);
+
+    builder.addView(destView);
+  }
+
+  const picker = builder.build();
   statusEl.style.display = "none";
   picker.setVisible(true);
 }
