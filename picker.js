@@ -3,7 +3,9 @@
 // since Manifest V3's CSP forbids loading remote scripts from inside the
 // extension itself.
 //
-// Communicates back to the extension via chrome.runtime.sendMessage(EXTENSION_ID, ...),
+// Two-step flow in a single tab: first pick the SOURCE folder to copy, then
+// pick the DESTINATION folder to copy it into. Only after both are chosen do
+// we message the extension, via chrome.runtime.sendMessage(EXTENSION_ID, ...),
 // which only works because the extension declares this page's origin in its
 // "externally_connectable" manifest key.
 
@@ -27,6 +29,10 @@ function getTokenFromHash() {
 
 const oauthToken = getTokenFromHash();
 
+// Tracks progress through the two-step flow.
+let step = "source"; // "source" | "destination"
+let sourceDoc = null; // { id, name, mimeType }
+
 if (!oauthToken) {
   setStatus("Missing authentication token. Close this tab and try again from the extension.", true);
 } else {
@@ -41,10 +47,14 @@ function loadGooglePickerLibrary() {
 }
 
 window.onGapiLoad = function () {
-  gapi.load("picker", { callback: showPicker });
+  gapi.load("picker", { callback: () => showPicker() });
 };
 
 function showPicker() {
+  const title = step === "source"
+    ? "Step 1 of 2 — Select the folder you want to copy"
+    : "Step 2 of 2 — Select where to copy it";
+
   const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
     .setParent("root") // start browsing from "My Drive", with normal folder navigation
     .setIncludeFolders(true)
@@ -52,7 +62,7 @@ function showPicker() {
     .setMode(google.picker.DocsViewMode.LIST);
 
   const picker = new google.picker.PickerBuilder()
-    .setTitle("Select a folder to copy")
+    .setTitle(title)
     .addView(view)
     .setOAuthToken(oauthToken)
     .setDeveloperKey(PICKER_API_KEY)
@@ -67,7 +77,22 @@ function showPicker() {
 function onPickerAction(data) {
   if (data.action === google.picker.Action.PICKED) {
     const doc = data.docs[0];
-    sendResultToExtension({ type: "PICKER_RESULT", id: doc.id, name: doc.name, mimeType: doc.mimeType });
+
+    if (step === "source") {
+      sourceDoc = doc;
+      step = "destination";
+      setStatus(`Source: "${doc.name}". Now choose where to copy it…`);
+      // Small delay so the previous Picker dialog fully closes before opening the next one.
+      setTimeout(showPicker, 200);
+    } else {
+      sendResultToExtension({
+        type: "PICKER_RESULT",
+        sourceId: sourceDoc.id,
+        sourceName: sourceDoc.name,
+        destId: doc.id,
+        destName: doc.name
+      });
+    }
   } else if (data.action === google.picker.Action.CANCEL) {
     sendResultToExtension({ type: "PICKER_CANCELLED" });
   }
