@@ -46,6 +46,7 @@ window.onGapiLoad = function () {
 
 function showPicker() {
   const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    .setParent("root") // start browsing from "My Drive", with normal folder navigation
     .setIncludeFolders(true)
     .setSelectFolderEnabled(true)
     .setMode(google.picker.DocsViewMode.LIST);
