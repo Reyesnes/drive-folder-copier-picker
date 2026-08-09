@@ -52,14 +52,22 @@ window.onGapiLoad = function () {
 
 function showPicker() {
   const title = step === "source"
-    ? "Step 1 of 2 — Select the folder you want to copy"
+    ? "Step 1 of 2 — Select a folder or file to copy"
     : "Step 2 of 2 — Select where to copy it";
 
-  const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
-    .setParent("root") // start browsing from "My Drive", with normal folder navigation
-    .setIncludeFolders(true)
-    .setSelectFolderEnabled(true)
-    .setMode(google.picker.DocsViewMode.LIST);
+  // Source step: any file type is selectable (folders included).
+  // Destination step: folders only — you can't copy "into" a file.
+  const view = step === "source"
+    ? new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setParent("root")
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setMode(google.picker.DocsViewMode.LIST)
+    : new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+        .setParent("root")
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setMode(google.picker.DocsViewMode.LIST);
 
   const picker = new google.picker.PickerBuilder()
     .setTitle(title)
