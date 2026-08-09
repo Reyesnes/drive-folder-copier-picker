@@ -1,0 +1,84 @@
+// picker.js — Hosted on GitHub Pages (regular web page, NOT part of the
+// extension package). This is what lets us load Google's Picker library,
+// since Manifest V3's CSP forbids loading remote scripts from inside the
+// extension itself.
+//
+// Communicates back to the extension via chrome.runtime.sendMessage(EXTENSION_ID, ...),
+// which only works because the extension declares this page's origin in its
+// "externally_connectable" manifest key.
+
+const PICKER_API_KEY = "AIzaSyCn_elBGOfmsUqhtmGc6ZxA3kFIQM0iLKU";
+const EXTENSION_ID = "adocjegeagfnjhdkjiagkabbnopmochk"; // fixed extension ID (see manifest "key")
+
+const statusEl = document.getElementById("status");
+
+function setStatus(text, isError = false) {
+  statusEl.textContent = text;
+  statusEl.classList.toggle("error", isError);
+  statusEl.style.display = "block";
+}
+
+function getTokenFromHash() {
+  // The token travels in the URL fragment (#token=...), which browsers never
+  // send to any server — GitHub Pages never sees it, only this page's JS does.
+  const params = new URLSearchParams(location.hash.substring(1));
+  return params.get("token");
+}
+
+const oauthToken = getTokenFromHash();
+
+if (!oauthToken) {
+  setStatus("Missing authentication token. Close this tab and try again from the extension.", true);
+} else {
+  loadGooglePickerLibrary();
+}
+
+function loadGooglePickerLibrary() {
+  const script = document.createElement("script");
+  script.src = "https://apis.google.com/js/api.js?onload=onGapiLoad";
+  script.onerror = () => setStatus("Could not load Google's Picker library. Check your connection and try again.", true);
+  document.head.appendChild(script);
+}
+
+window.onGapiLoad = function () {
+  gapi.load("picker", { callback: showPicker });
+};
+
+function showPicker() {
+  const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(true)
+    .setMode(google.picker.DocsViewMode.LIST);
+
+  const picker = new google.picker.PickerBuilder()
+    .setTitle("Select a folder to copy")
+    .addView(view)
+    .setOAuthToken(oauthToken)
+    .setDeveloperKey(PICKER_API_KEY)
+    .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
+    .setCallback(onPickerAction)
+    .build();
+
+  statusEl.style.display = "none";
+  picker.setVisible(true);
+}
+
+function onPickerAction(data) {
+  if (data.action === google.picker.Action.PICKED) {
+    const doc = data.docs[0];
+    sendResultToExtension({ type: "PICKER_RESULT", id: doc.id, name: doc.name, mimeType: doc.mimeType });
+  } else if (data.action === google.picker.Action.CANCEL) {
+    sendResultToExtension({ type: "PICKER_CANCELLED" });
+  }
+}
+
+function sendResultToExtension(message) {
+  if (!(window.chrome && chrome.runtime && chrome.runtime.sendMessage)) {
+    setStatus("Could not communicate with the extension. Close this tab and try again.", true);
+    return;
+  }
+  chrome.runtime.sendMessage(EXTENSION_ID, message, () => {
+    // Best-effort close; the extension also closes this tab on its end as a fallback.
+    window.close();
+  });
+}
